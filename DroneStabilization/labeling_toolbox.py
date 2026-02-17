@@ -132,10 +132,10 @@ def compare_labels(label_names, stored_labels):
 
 class ImageLabelingToolbox:
     # TODO: assess use of config folder in class
-    def __init__(self, config, command, machine_learning=bool, output_folder=None, image_type=None, toplevel=False,
+    def __init__(self, command, output_folder=None, image_type=None, toplevel=False,
                  search_folder=None, label_names=None, thickness=10, image_size=400):
 
-        config = yaml_utils.read_config(config)
+        config = yaml_utils.read_config(config)#
         project_path = config["project_path"]
 
         if command.__eq__("points") is False and command.__eq__("boxes") is False:
@@ -147,26 +147,15 @@ class ImageLabelingToolbox:
         self.image_size = image_size
 
         # determine what images to use and where to store the labels based on points or boxes labeling
-        if command == "points":
-            project_folder = os.path.join(project_path, "image_homography")
-            if output_folder is None:
-                self.output_folder = project_folder
-            if search_folder is None:
-                self.search_folder = askdirectory(initialdir=project_path, title="Select images to label")
-            else:
-                self.search_folder = os.path.basename(search_folder)
-            if os.path.exists(project_folder) is False:
-                os.mkdir(project_folder)
-        elif command == "boxes":
-            project_folder = os.path.join(project_path, "bounding_boxes")
-            if output_folder is None:
-                self.output_folder = project_folder
-            if search_folder is None:
-                self.search_folder = "original_images"
-            else:
-                self.search_folder = os.path.basename(search_folder)
-            if os.path.exists(project_folder) is False:
-                os.mkdir(project_folder)
+        project_folder = os.path.join(project_path, "bounding_boxes")
+        if output_folder is None:
+            self.output_folder = project_folder
+        if search_folder is None:
+            self.search_folder = "original_images"
+        else:
+            self.search_folder = os.path.basename(search_folder)
+        if os.path.exists(project_folder) is False:
+            os.mkdir(project_folder)
         if output_folder is not None:
             self.output_folder = output_folder
 
@@ -229,30 +218,6 @@ class ImageLabelingToolbox:
         else:
             self.window = tk.Toplevel()
 
-        # get label names list
-        if label_names is None:
-            if command == "points":
-                self.label_names = config["keypoint_classes"]
-            elif command == "boxes":
-                self.label_names = config["bbox_classes"]
-        elif isinstance(label_names, list):
-            self.label_names = label_names
-        else:
-            raise TypeError(f"Expected type list for label_names, got {type(label_names)} instead.")
-
-        self.n_points = len(self.label_names)
-
-        # matplotlib colors
-        color_list = mpl.colormaps['viridis'].resampled(self.n_points)
-        # self.color_list = []
-        self.color_list = [mpl.colors.rgb2hex(color_list(i)) for i in range(color_list.N)]
-        # for i in range(self.n_points):
-        #     rgba = color_list(i)
-        #     # rgb2hex accepts rgb or rgba
-        #     self.color_list.append(mpl.colors.rgb2hex(rgba))
-
-
-
         # starting points for bounding box
         self.start_xy = None
 
@@ -286,25 +251,14 @@ class ImageLabelingToolbox:
         # Add PhotoImage to the Canvas
         self.canvas.create_image(0, 0, image=self.photo, anchor=tk.NW)
         # bind click and crop function to mouse click
-        if command == "points":
-            self.canvas.bind('<Button>', self.click_and_crop)
-        elif command == "boxes":
-            self.canvas.bind('<Button>', self.start_bounding_box)
-            self.canvas.bind('<ButtonRelease>', self.release_bounding_box)
+        self.canvas.bind('<Button>', self.start_bounding_box)
+        self.canvas.bind('<ButtonRelease>', self.release_bounding_box)
 
         # create next button
         button_next = tk.Button(master=self.button_frame, text="Next", command=self.next_button)
 
         # create quit button
         button_quit = tk.Button(master=self.button_frame, text="Quit", command=self.window.destroy)
-
-        # create radio buttons and set to first button by default
-        self.radio_int = tk.IntVar()
-        self.radio_int.set(0)
-        for i in range(len(self.label_names)):
-            radio = tk.Radiobutton(self.landmark_frame, text=self.label_names[i], value=i, variable=self.radio_int)
-            radio.configure(fg="black")
-            radio.pack()
 
         # pack buttons to frame
         button_next.pack(side=tk.RIGHT)
@@ -319,47 +273,18 @@ class ImageLabelingToolbox:
         self.button_frame.pack(side=tk.BOTTOM)
         self.window.mainloop()
 
-    def click_and_crop(self, event):
-        # click again after placing last point to continue to next image
-        if len(self.stored_xy.keys()) == len(self.label_names):
-            self.next_button()
-        else:
-            try:
-                # check if point has been labeled before (for relabeling purposes). If so, delete and relabel
-                if self.label_names[self.radio_int.get()] in self.stored_xy.keys():
-                    self.canvas.delete(self.stored_xy[self.label_names[self.radio_int.get()]][1])
-                oval_id = self.canvas.create_oval(event.x - 5, event.y - 5, event.x + 5, event.y + 5, fill=self.color_list[self.radio_int.get()],
-                                                  width=20, outline="")
-                self.stored_xy[self.label_names[self.radio_int.get()]] = [(event.x, event.y), oval_id]
-                self.radio_int.set(self.radio_int.get() + 1)
-            #     exception for if it was last point and no label is selected, assumes labeling is complete
-            except IndexError:
-                self.next_button()
-
     def start_bounding_box(self, event):
-        # click again after placing last point to continue to next image
-        if len(self.stored_xy.keys()) == len(self.label_names):
-            self.next_button()
-        else:
-            try:
-                # check if point has been labeled before (for relabeling purposes). If so, delete and relabel
-                if self.label_names[self.radio_int.get()] in self.stored_xy.keys():
-                    self.canvas.delete(self.stored_xy[self.label_names[self.radio_int.get()]][1])
-                self.start_xy = event.x, event.y
-            #     exception for if it was last point and no label is selected, assumes labeling is complete
-            except IndexError:
-                self.next_button()
+        # collect events
+        self.start_xy = event.x, event.y
 
     def release_bounding_box(self, event):
         # join tuples of x,y coordinates in form upper x, upper y, lower x, lower y
         rect = self.start_xy + (event.x, event.y)
         # create rectangle and return ID
         rect_id = self.canvas.create_rectangle(rect[0], rect[1], rect[2], rect[3],
-                                               width=2, outline=self.color_list[self.radio_int.get()])
+                                               width=2, outline="red")
         # stored xy for each label is list of rect points and rect ID
-        self.stored_xy[self.label_names[self.radio_int.get()]] = [rect, rect_id]
-        # move to next object to be labeled
-        self.radio_int.set(self.radio_int.get() + 1)
+        self.stored_xy = [rect, rect_id]
         # reset start xy points
         self.start_xy = None
 
