@@ -8,20 +8,6 @@ from tkinter import simpledialog
 from pathlib import Path
 
 
-# window = tk.Tk()
-# window.title("Lumeleon")
-
-#
-# standardframe = tk.Frame(window)
-# standardframe.grid(row=0, column=0)
-# cropframe = tk.Frame(window)
-# cropframe.grid(row=1, column=0)
-# maskframe = tk.Frame(window)
-# maskframe.grid(row=2, column=0)
-# extractframe = tk.Frame(window)
-# extractframe.grid(row=3, column=0)
-
-
 class NewProjectFrame(ttk.Frame):
     def __init__(self, container):
         super().__init__(container)
@@ -48,7 +34,7 @@ class NewProjectFrame(ttk.Frame):
 
         self.image_type_label = tk.Label(self, text="Select/input raw file type")
         self.image_type_label.grid(column=0, row=3, sticky='e', **options)
-        self.image_type_box = ttk.Combobox(self, values=["cr2", "cr3", "dng", "nef", "nrw"])
+        self.image_type_box = ttk.Combobox(self, values=["mp4", "mov"])
         self.image_type_box.grid(column=1, row=3, sticky='w', **options)
 
         self.grid(column=0, row=2, **options)
@@ -139,7 +125,6 @@ class ControlFrame(ttk.LabelFrame):
             config_file = self.frames[1].config_path
 
         elif self.frames[0].images_paths is not None and self.frames[1].config_path is None:
-            # print(self.frames[0].images_paths)
             config_file = new_project(self.frames[0].project_name_variable.get(),
                                       self.frames[0].experimenter_name_variable.get(),
                                       self.frames[0].images_paths,
@@ -170,7 +155,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title('Lumeleon')
+        self.title('DroneStabilization')
         # self.geometry('500x500')
         self.resizable(True, True)
 
