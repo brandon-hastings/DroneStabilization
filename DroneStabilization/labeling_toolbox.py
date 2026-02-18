@@ -16,6 +16,8 @@ def check_resume(videos_list, csv_file):
         processed_videos = df["video"].to_list()
         # remove already processed videos
         todo_videos = list(set(videos_list) - set(processed_videos))
+        if len(todo_videos) == 0:
+            raise IndexError("No videos left to label after comparision with previous maks_labels.csv file")
         return todo_videos
     else:
         return videos_list
@@ -28,6 +30,7 @@ class MaskSelectionToolbox:
         self.video_folder = video_folder
         self.output_csv = output_csv
         self.image_size = image_size
+        self.frame_index = None
 
         # list of images to process
         self.video_list = [
@@ -82,7 +85,8 @@ class MaskSelectionToolbox:
     def load_image(self):
         path = Path(self.video_list[self.index])
         # extract middle frame and convert color
-        img = cv2.cvtColor(frame_ripper(path), cv2.COLOR_BGR2RGB)
+        frame_img, self.frame_index = frame_ripper(path)
+        img = cv2.cvtColor(frame_img, cv2.COLOR_BGR2RGB)
 
         # resize keeping aspect ratio
         r = self.image_size / img.shape[1]
@@ -120,7 +124,7 @@ class MaskSelectionToolbox:
         if self.start_xy:
             self.labels[self.video_list[self.index]] = (
                 self.start_xy[0], self.start_xy[1],
-                event.x, event.y,
+                event.x, event.y, self.frame_index
             )
 
     # -------------------- saving + next image --------------------
@@ -138,14 +142,16 @@ class MaskSelectionToolbox:
 
     # -------------------- finish & save CSV --------------------
     def finish(self):
-        #TODO: change to "a" when return to labelling function is created
-        with Path(self.output_csv).open(mode="w", newline="") as f:
+        output_csv = Path(self.output_csv)
+        output_csv.parent.mkdir(exist_ok=True, parents=True)
+        # was mode "w", changed to "a" to support return to labelling
+        with output_csv.open(mode="a", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["video", "x1", "y1", "x2", "y2"])
+            writer.writerow(["video", "x1", "y1", "x2", "y2", "ref_frame"])
             for vid, box in self.labels.items():
-                writer.writerow([os.path.basename(vid)] + list(box))
+                writer.writerow([vid] + list(box))
 
-        print(f"Saved labels to {self.output_csv}")
+        print(f"Saved labels to {output_csv}")
         self.window.destroy()
 
 
