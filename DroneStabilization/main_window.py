@@ -10,11 +10,8 @@ from labeling_toolbox import MaskSelectionToolbox
 from video_functions import batch_stabilize
 
 """Main window showing the following project steps on tk notebook tabs:
-Label Images
-Standardize Images
-Background Segmentation
-Pattern Segmentation
-Extract Color Values"""
+ROI selection
+Calculate shifts"""
 
 
 # Global variable for config file. Set by MainWindow class at initialization, then only referenced by other classes
@@ -77,9 +74,8 @@ class MaskSelection(tk.Frame):
         self.selection_label.grid(column=0, row=0)
         self.default_path = os.path.join(utils.yaml_utils.read_config(config_file)["project_path"],
                                               "original_data")
-        self.selected_path = tk.StringVar()
-        self.selected_path.set(self.default_path)
-        self.path_entry = tk.Entry(self.mid_frame, textvariable=self.default_path,
+        self.selected_path = tk.StringVar(value=self.default_path)
+        self.path_entry = tk.Entry(self.mid_frame, textvariable=self.selected_path,
                                      width=len(self.default_path), takefocus=False)
         self.path_entry.grid(column=1, row=0)
 
@@ -95,11 +91,10 @@ class MaskSelection(tk.Frame):
     def browse_button(self):
         selected_folder = filedialog.askdirectory(initialdir=Path(self.default_path).parent)
         self.selected_path.set(selected_folder)
-        self.default_path = selected_folder
 
     def button_action(self):
-        MaskSelectionToolbox(self.default_path,
-                             output_csv=Path(self.default_path).parents[1] / "results" / "mask_labels.csv",
+        MaskSelectionToolbox(self.selected_path,
+                             output_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
                              toplevel=True)
 
 
@@ -116,9 +111,8 @@ class StabilizeVideos(tk.Frame):
         self.selection_label.grid(column=0, row=0)
         self.default_path = os.path.join(utils.yaml_utils.read_config(config_file)["project_path"],
                                               "original_data")
-        self.selected_path = tk.StringVar()
-        self.selected_path.set(self.default_path)
-        self.path_entry = tk.Entry(self.mid_frame, textvariable=self.default_path,
+        self.selected_path = tk.StringVar(value=self.default_path)
+        self.path_entry = tk.Entry(self.mid_frame, textvariable=self.selected_path,
                                      width=len(self.default_path), takefocus=False)
         self.path_entry.grid(column=1, row=0)
 
@@ -134,12 +128,11 @@ class StabilizeVideos(tk.Frame):
     def browse_button(self):
         selected_folder = filedialog.askdirectory(initialdir=Path(self.default_path).parent)
         self.selected_path.set(selected_folder)
-        self.default_path = selected_folder
 
     def button_action(self):
-        batch_stabilize(self.default_path,
-                        mask_csv=Path(self.default_path).parents[1] / "results" / "mask_labels.csv",
-                        shifts_csv=Path(self.default_path).parents[1] / "results" / "dxdy_shifts.csv")
+        batch_stabilize(self.selected_path,
+                        mask_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
+                        shifts_csv=Path(self.default_path).parent / "results" / "dxdy_shifts.csv")
 
 
 class Notebook(ttk.Frame):
