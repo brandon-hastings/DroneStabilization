@@ -32,7 +32,7 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
     wd = Path(working_directory).resolve()
     project_name = "{pn}-{exp}-{date}".format(pn=project, exp=experimenter, date=date)
     project_path = wd / project_name
-    os.makedirs(project_path)
+    os.makedirs(project_path, exist_ok=True)
     destination = project_path / "original_data"
 
     if len(folder) == 1:
@@ -43,7 +43,7 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
             if file_name.lower().endswith(image_type):
                 # construct full file path
                 source = Path(folder[0]) / file_name
-                target = subfolder / file_name
+                target = Path(subfolder) / file_name
                 # symlink only files
                 if os.path.isfile(source):
                     if not target.exists():
