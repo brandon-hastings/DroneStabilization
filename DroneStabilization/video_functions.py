@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import csv
 from pathlib import Path
+import math
 
 def frame_ripper(video_path):
     '''
@@ -23,90 +24,219 @@ def frame_ripper(video_path):
     else:
         return (frame, middle_frame - 1)
     
-def video_stabilization(video_path: Path, roi_coords: tuple, reference_frame_index: int, shifts_csv: Path):
-    # --- Config ---
-    org_name = video_path.stem
-    new_name = "_".join((org_name, "stabilized"))
-    stabilized_video = video_path.with_stem(new_name)
-    print(stabilized_video)
-    mode = "translation"  # or "affine"
-    use_phase_correlation = True  # else template matching
 
-    # --- Load video ---
+def video_stabilization(
+    video_path: Path,
+    roi_coords: tuple,                    # (x, y, w, h)
+    reference_frame_index: int,
+    shifts_csv: Path,
+    output_path: Path | None = None,
+    default_fps: float = 25.0,
+    ensure_even_mp4: bool = True,
+    prefer_codecs: tuple = ("mp4v", "avc1", "XVID"),
+    log_every: int = 100,
+    estimation_scale: float | None = None,  # e.g., 0.5 to downscale ROI for estimation
+):
+    """
+    Streamed, two-pass translation stabilization using phase correlation on a user ROI.
+    Pass 1: read reference frame only (sequential).
+    Pass 2: stream frames, compute (dx, dy), warp, and write each frame immediately.
+    """
+
+    video_path = Path(video_path)
+    assert video_path.exists(), f"Input video not found: {video_path}"
+
+    if output_path is None:
+        output_path = video_path.with_stem(f"{video_path.stem}_stabilized")
+    output_path = Path(output_path)
+
+    # ------------------
+    # Open, read metadata
+    # ------------------
     cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Failed to open video: {video_path}")
+
     fps = cap.get(cv2.CAP_PROP_FPS)
+    if not fps or math.isnan(fps) or fps <= 0:
+        fps = float(default_fps)
+
     W  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     H  = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     N  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"[INFO] Source opened OK: {video_path}")
+    print(f"[INFO] W={W}, H={H}, N={N}, FPS={fps:.3f}")
 
-    # --- Read reference frame ---
-    def read_frame(i):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+    if W <= 0 or H <= 0:
+        cap.release()
+        raise RuntimeError("Video reports zero width/height—cannot proceed.")
+
+    # -----------------------
+    # PASS 1: get ref frame
+    # -----------------------
+    ref_bgr = None
+    idx = 0
+    while True:
         ret, frame = cap.read()
-        return frame if ret else None
-
-    ref_bgr = read_frame(reference_frame_index)
-    ref_gray = cv2.cvtColor(ref_bgr, cv2.COLOR_BGR2GRAY)
-
-    # --- Define ROI/mask ---
-    # stored as x1,y1,w,h
-    x, y, w, h = roi_coords
-    ref_roi = ref_gray[y:y+h, x:x+w]
-
-
-    # Optional windowing to reduce edge effects
-    window = cv2.createHanningWindow((ref_roi.shape[1], ref_roi.shape[0]), cv2.CV_64F)
-
-    # --- Prepare writer ---
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(str(stabilized_video), fourcc, fps, (W, H))
-
-    # --- Logging ---
-    rows = [("frame", "dx", "dy")]  # extend with affine fields if needed
-
-    # --- Process all frames ---
-    for i in range(N):
-        frame = read_frame(i)
-        if frame is None:
+        if not ret:
             break
+        if idx == reference_frame_index:
+            ref_bgr = frame.copy()
+            break
+        idx += 1
+    cap.release()
+
+    if ref_bgr is None:
+        # Clamp and try again if index out of range
+        reference_frame_index = max(0, min(N - 1, reference_frame_index))
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            raise RuntimeError(f"Re-open failed: {video_path}")
+        for i in range(reference_frame_index + 1):
+            ret, frame = cap.read()
+            if not ret:
+                cap.release()
+                raise RuntimeError("Unable to read reference frame after clamping.")
+        ref_bgr = frame.copy()
+        cap.release()
+
+    # ROI clamp
+    x, y, w, h = map(int, roi_coords)
+    x = max(0, min(x, W - 1))
+    y = max(0, min(y, H - 1))
+    w = max(1, min(w, W - x))
+    h = max(1, min(h, H - y))
+
+    ref_gray = cv2.cvtColor(ref_bgr, cv2.COLOR_BGR2GRAY)
+    ref_roi = ref_gray[y:y+h, x:x+w]
+    if ref_roi.size == 0:
+        raise ValueError("ROI is empty after clamping; check roi_coords.")
+
+    # Optional downscale for estimation (faster on large ROIs)
+    scale = 1.0
+    if estimation_scale and 0 < estimation_scale < 1.0:
+        scale = float(estimation_scale)
+        new_size = (max(1, int(w * scale)), max(1, int(h * scale)))
+        ref_roi_small = cv2.resize(ref_roi, new_size, interpolation=cv2.INTER_AREA)
+        window = cv2.createHanningWindow((ref_roi_small.shape[1], ref_roi_small.shape[0]), cv2.CV_64F)
+        refA = ref_roi_small.astype(np.float64) * window
+    else:
+        window = cv2.createHanningWindow((ref_roi.shape[1], ref_roi.shape[0]), cv2.CV_64F)
+        refA = ref_roi.astype(np.float64) * window
+
+    # -----------------------
+    # Prepare writer (with fallbacks and even-dim padding if MP4)
+    # -----------------------
+    is_mp4_target = output_path.suffix.lower() == ".mp4"
+    outW, outH = W, H
+    pad_right = pad_bottom = 0
+    if is_mp4_target and ensure_even_mp4:
+        if outW % 2 != 0:
+            pad_right = 1
+            outW += 1
+        if outH % 2 != 0:
+            pad_bottom = 1
+            outH += 1
+        if pad_right or pad_bottom:
+            print(f"[INFO] Padding for MP4 even dims: ({W},{H}) -> ({outW},{outH})")
+
+    def try_open_writer(path: Path, fourcc_tag: str, width: int, height: int, fps_val: float):
+        fourcc = cv2.VideoWriter_fourcc(*fourcc_tag)
+        wr = cv2.VideoWriter(str(path), fourcc, fps_val, (width, height))
+        return wr
+
+    attempts = []
+    for tag in prefer_codecs:
+        if tag in ("mp4v", "avc1"):
+            attempts.append((tag, output_path.with_suffix(".mp4"), outW, outH))
+        elif tag == "XVID":
+            attempts.append((tag, output_path.with_suffix(".avi"), W, H))
+        else:
+            attempts.append((tag, output_path.with_suffix(".avi"), W, H))
+
+    writer = None
+    chosen = None
+    for tag, path_try, w_try, h_try in attempts:
+        wr = try_open_writer(path_try, tag, w_try, h_try, fps)
+        print(f"[INFO] Trying writer {tag} -> {path_try} @ {w_try}x{h_try} … opened={wr.isOpened()}")
+        if wr.isOpened():
+            writer = wr
+            chosen = (tag, path_try, w_try, h_try)
+            break
+        else:
+            try: wr.release()
+            except: pass
+
+    if writer is None:
+        raise RuntimeError("Failed to open VideoWriter (mp4v/avc1/XVID). Try AVI/MJPG or install FFmpeg-enabled OpenCV.")
+
+    fourcc_tag, out_path, writeW, writeH = chosen
+    print(f"[INFO] Using writer: {fourcc_tag} -> {out_path} ({writeW}x{writeH} @ {fps:.3f} fps)")
+
+    # -----------------------
+    # PASS 2: stream frames, compute dx/dy, write video & CSV
+    # -----------------------
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        writer.release()
+        raise RuntimeError(f"Failed to re-open video: {video_path}")
+
+    # Prepare CSV (stream write)
+    shifts_csv = Path(shifts_csv)
+    shifts_csv.parent.mkdir(exist_ok=True, parents=True)
+    fcsv = shifts_csv.open("w", newline="")
+    wcsv = csv.writer(fcsv)
+    wcsv.writerow(("frame", "dx", "dy"))
+
+    frame_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         mov_roi = gray[y:y+h, x:x+w]
 
-        # --- Estimate motion ---
-        if use_phase_correlation:
-            # Convert to float64 as required by phaseCorrelate
-            A = ref_roi.astype(np.float64)
-            B = mov_roi.astype(np.float64)
-            # Apply window
-            Aw = A * window
-            Bw = B * window
-            (shift_y, shift_x), response = cv2.phaseCorrelate(Bw, Aw)  # (dy, dx)
-            dx, dy = float(shift_x), float(shift_y)
+        if scale != 1.0:
+            mov_roi_small = cv2.resize(mov_roi, (refA.shape[1], refA.shape[0]), interpolation=cv2.INTER_AREA)
+            B = mov_roi_small.astype(np.float64) * window
         else:
-            res = cv2.matchTemplate(mov_roi, ref_roi, cv2.TM_CCOEFF_NORMED)
-            minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(res)
-            # Template top-left in mov that best matches ref
-            # Convert to dx, dy relative to ROI anchor (0,0)
-            dx = (x + maxLoc[0]) - x
-            dy = (y + maxLoc[1]) - y
+            B = mov_roi.astype(np.float64) * window
 
-        # --- Apply transform to original full frame ---
+        # Phase correlation returns (dy, dx)
+        (shift_y, shift_x), response = cv2.phaseCorrelate(B, refA)
+        dx = float(shift_x) / scale
+        dy = float(shift_y) / scale
+
+        # Apply translation to full frame
         M = np.array([[1, 0, dx],
-                    [0, 1, dy]], dtype=np.float32)
+                      [0, 1, dy]], dtype=np.float32)
         stabilized = cv2.warpAffine(frame, M, (W, H),
                                     flags=cv2.INTER_LINEAR,
                                     borderMode=cv2.BORDER_REFLECT)
 
-        writer.write(stabilized)
-        rows.append((i, dx, dy))
+        if fourcc_tag in ("mp4v", "avc1") and (pad_right or pad_bottom):
+            stabilized = cv2.copyMakeBorder(stabilized, 0, pad_bottom, 0, pad_right,
+                                            borderType=cv2.BORDER_CONSTANT, value=(0, 0, 0))
 
-    # --- Cleanup & save CSV ---
+        writer.write(stabilized)
+        wcsv.writerow((frame_idx, dx, dy))
+
+        if (frame_idx % log_every) == 0:
+            print(f"[INFO] Frame {frame_idx}/{N}  dx={dx:.3f}  dy={dy:.3f}")
+
+        frame_idx += 1
+
+    # Cleanup
     writer.release()
     cap.release()
+    fcsv.close()
 
-    shifts_csv.parent.mkdir(exist_ok=True, parents=True)
-    with shifts_csv.open(mode="w", newline="") as f:
-        csv.writer(f).writerows(rows)
+    size_bytes = out_path.stat().st_size if out_path.exists() else 0
+    print(f"[INFO] Done. Wrote: {out_path}  bytes={size_bytes}")
+    print(f"[INFO] CSV: {shifts_csv}")
+
+    return out_path
 
 
 def batch_stabilize(video_folder, mask_csv, shifts_csv):
