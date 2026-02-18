@@ -1,34 +1,28 @@
 import cv2
+import pandas as pd
 from PIL import Image, ImageTk
 from pathlib import Path
 import os
 import tkinter as tk
 from tkinter import filedialog
 import csv
+from video_functions import frame_ripper
 
-
-def frame_ripper(video_path):
-    '''
-    Docstring for frame_ripper
-    
-    :param video_path: path to video
-
-    :retval frame: middle frame of video for creating a bounding box
-    '''
-    # where video is expected to be the filename of a video
-    source = cv2.VideoCapture(str(video_path))
-    frames = int(source.get(cv2.CAP_PROP_FRAME_COUNT))
-    middle_frame = int(frames/2)
-    source.set(cv2.CAP_PROP_POS_FRAMES, middle_frame-1)
-    res, frame = source.read()
-    if not res:
-        IndexError("No frame found")
+def check_resume(videos_list, csv_file):
+    csv_file = Path(csv_file)
+    # if csv exist, get videos already done and subtract from video list
+    if csv_file.exists():
+        df = pd.read_csv(csv_file, header=0)
+        processed_videos = df["video"].to_list()
+        # remove already processed videos
+        todo_videos = list(set(videos_list) - set(processed_videos))
+        return todo_videos
     else:
-        return frame
-
+        return videos_list
+  
 
 class MaskSelectionToolbox:
-    def __init__(self, video_folder, output_csv="labels.csv", image_size=800):
+    def __init__(self, video_folder, output_csv, image_size=800, toplevel=False):
 
         # store settings
         self.video_folder = video_folder
@@ -42,14 +36,20 @@ class MaskSelectionToolbox:
             if f.lower().endswith((".mov", ".mp4"))
         ]
 
+        self.video_list = check_resume(self.video_list, self.output_csv)
+
         if len(self.video_list) == 0:
             raise ValueError("No videos found in folder!")
 
         # store bounding boxes: {video_path: (x1, y1, x2, y2)}
         self.labels = {}
 
-        # Tkinter window
-        self.window = tk.Tk()
+        # determine if window wil belong to a higher level tk window
+        if toplevel is False:
+            self.window = tk.Tk()
+        else:
+            self.window = tk.Toplevel()
+            
         self.window.title("Stabilization Mask Selection")
 
         # canvas
@@ -80,7 +80,7 @@ class MaskSelectionToolbox:
 
     # -------------------- image loading --------------------
     def load_image(self):
-        path = self.video_list[self.index]
+        path = Path(self.video_list[self.index])
         # extract middle frame and convert color
         img = cv2.cvtColor(frame_ripper(path), cv2.COLOR_BGR2RGB)
 
@@ -138,7 +138,8 @@ class MaskSelectionToolbox:
 
     # -------------------- finish & save CSV --------------------
     def finish(self):
-        with open(self.output_csv, "w", newline="") as f:
+        #TODO: change to "a" when return to labelling function is created
+        with Path(self.output_csv).open(mode="w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["video", "x1", "y1", "x2", "y2"])
             for vid, box in self.labels.items():
@@ -148,8 +149,8 @@ class MaskSelectionToolbox:
         self.window.destroy()
 
 
-# -------------------- run tool --------------------
-if __name__ == "__main__":
-    folder = filedialog.askdirectory(title="Select image folder")
-    if folder:
-        SimpleBoundingBoxTool(folder)
+# # -------------------- run tool --------------------
+# if __name__ == "__main__":
+#     folder = filedialog.askdirectory(title="Select image folder")
+#     if folder:
+#         MaskSelectionToolbox(folder)
