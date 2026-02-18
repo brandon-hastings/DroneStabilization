@@ -5,7 +5,6 @@ from pathlib import Path
 from tkinter import ttk
 from tkinter import filedialog
 import utils
-import utils.directory_utils
 import utils.yaml_utils
 from labeling_toolbox import MaskSelectionToolbox
 from video_functions import batch_stabilize
