@@ -47,8 +47,9 @@ def video_stabilization(
     assert video_path.exists(), f"Input video not found: {video_path}"
 
     if output_path is None:
-        output_path = video_path.with_stem(f"{video_path.stem}_stabilized")
+        output_path = video_path.parents[2] / "results" / "stabilized_videos" / f"{video_path.stem}_stabilized{video_path.suffix}"
     output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # ------------------
     # Open, read metadata
@@ -246,12 +247,11 @@ def batch_stabilize(video_folder, mask_csv, shifts_csv):
     for vid in video_list:
         print(vid)
         row = tuple(masked_df.loc[masked_df['video'] == str(vid)].iloc[0])
-        h = abs(row[4] - row[2])
-        w = abs(row[3] - row[1])
-        roi_coords = (row[1], row[2], w, h)
+        # get roi coords
+        roi_coords = row[1:5]
         #get ref frame
         ref_frame = row[5]
-        #name individual shifts file
+        # name individual shifts file
         vid_stem = Path(vid).stem
         shifts_csv = Path(shifts_csv)
         shifts_stem = shifts_csv.stem
