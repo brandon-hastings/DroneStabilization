@@ -21,6 +21,18 @@ def check_resume(videos_list, csv_file):
         return todo_videos
     else:
         return videos_list
+    
+
+'''
+Take in x1,x2,y1,y2 coords and make them start from the top left corner for x and y, then add width and height
+Essentially protect from an ROI selection up and to the left'''
+def make_coords_safe(x_coords: tuple, y_coords: tuple):
+    x = min(x_coords)
+    w = max(x_coords) - x
+    y = min(y_coords)
+    h = max(y_coords) - y
+    return x, y, w, h
+
   
 
 class MaskSelectionToolbox:
@@ -122,9 +134,9 @@ class MaskSelectionToolbox:
 
     def finish_box(self, event):
         if self.start_xy:
+            x, y, w, h = make_coords_safe((self.start_xy[0], event.x), (self.start_xy[1], event.y))
             self.labels[self.video_list[self.index]] = (
-                self.start_xy[0], self.start_xy[1],
-                event.x, event.y, self.frame_index
+                x, y, w, h, self.frame_index
             )
 
     # -------------------- saving + next image --------------------
@@ -147,7 +159,7 @@ class MaskSelectionToolbox:
         # was mode "w", changed to "a" to support return to labelling
         with output_csv.open(mode="a", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["video", "x1", "y1", "x2", "y2", "ref_frame"])
+            writer.writerow(["video", "x", "y", "w", "h", "ref_frame"])
             for vid, box in self.labels.items():
                 writer.writerow([vid] + list(box))
 
