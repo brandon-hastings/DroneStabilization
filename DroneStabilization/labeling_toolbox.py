@@ -1,27 +1,12 @@
 import cv2
-import pandas as pd
 from PIL import Image, ImageTk
 from pathlib import Path
 import os
 import tkinter as tk
-from tkinter import filedialog
 import csv
 from video_functions import frame_ripper
+from utils.general_utils import check_resume
 
-def check_resume(videos_list, csv_file):
-    csv_file = Path(csv_file)
-    # if csv exist, get videos already done and subtract from video list
-    if csv_file.exists():
-        df = pd.read_csv(csv_file, header=0)
-        processed_videos = df["video"].to_list()
-        # remove already processed videos
-        todo_videos = list(set(videos_list) - set(processed_videos))
-        if len(todo_videos) == 0:
-            raise IndexError("No videos left to label after comparision with previous maks_labels.csv file")
-        return todo_videos
-    else:
-        return videos_list
-    
 
 '''
 Take in x1,x2,y1,y2 coords and make them start from the top left corner for x and y, then add width and height
