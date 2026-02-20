@@ -93,7 +93,7 @@ class MaskSelection(tk.Frame):
         self.selected_path.set(selected_folder)
 
     def button_action(self):
-        MaskSelectionToolbox(self.selected_path,
+        MaskSelectionToolbox(self.selected_path.get(),
                              output_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
                              toplevel=True)
 
@@ -130,7 +130,7 @@ class StabilizeVideos(tk.Frame):
         self.selected_path.set(selected_folder)
 
     def button_action(self):
-        batch_stabilize(self.selected_path,
+        batch_stabilize(self.selected_path.get(),
                         mask_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
                         shifts_csv=Path(self.default_path).parent / "results" / "dxdy_shifts.csv")
 
