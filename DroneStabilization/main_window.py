@@ -8,6 +8,7 @@ import utils
 import utils.yaml_utils
 from labeling_toolbox import MaskSelectionToolbox
 from video_functions import batch_stabilize
+from roi_evaluation import batch_suggest_rois
 
 """Main window showing the following project steps on tk notebook tabs:
 ROI selection
@@ -80,7 +81,40 @@ class MaskSelection(tk.Frame):
         self.path_entry.grid(column=1, row=0)
 
         self.config_browse = tk.Button(self.mid_frame, text="Browse", command=self.browse_button)
-        self.config_browse.grid(column=3, row=0)
+        self.config_browse.grid(column=2, row=0)
+
+        self.radio_var = tk.IntVar()
+        self.radio_var.set(1)
+        self.choose_label = tk.Label(self.mid_frame, text="Choose ROI selection method")
+        self.choose_label.grid(column=0, row=1)
+
+        self.automatic_button = tk.Radiobutton(self.mid_frame, text="Automatic", value=1, variable=self.radio_var,
+                                           command=self.enable_entry)
+        self.automatic_button.grid(column=0, row=2)
+        self.manual_button = tk.Radiobutton(self.mid_frame, text="Manual", value=0, variable=self.radio_var,
+                                            command=self.disable_entry)
+        self.manual_button.grid(column=0, row=3)
+
+        self.size_label = tk.Label(self.mid_frame, text="Region size (square):")
+        self.size_label.grid(column=1, row=1)
+        self.default_size = "256"
+        self.size_var = tk.StringVar(value=self.default_size)
+        self.size_entry = tk.Entry(self.mid_frame, textvariable=self.size_var, takefocus=False)
+        self.size_entry.grid(column=1, row=2)
+
+        self.frames_label = tk.Label(self.mid_frame, text="Frames to sample:")
+        self.frames_label.grid(column=2, row=1)
+        self.default_frames = "20"
+        self.frames_var = tk.StringVar(value=self.default_frames)
+        self.frames_entry = tk.Entry(self.mid_frame, textvariable=self.frames_var, takefocus=False)
+        self.frames_entry.grid(column=2, row=2)
+
+        self.regions_label = tk.Label(self.mid_frame, text="Regions to rank:")
+        self.regions_label.grid(column=3, row=1)
+        self.default_regions = "3"
+        self.regions_var = tk.StringVar(value=self.default_regions)
+        self.regions_entry = tk.Entry(self.mid_frame, textvariable=self.regions_var, takefocus=False)
+        self.regions_entry.grid(column=3, row=2)
 
         self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
 
@@ -88,14 +122,46 @@ class MaskSelection(tk.Frame):
         self.mid_frame.grid(column=0, row=1)
         self.bottom_frame.grid(column=0, row=2)
 
+    def enable_entry(self):
+        self.size_label.configure(state='normal')
+        self.size_entry.configure(state='normal')
+        self.frames_label.configure(state='normal')
+        self.frames_entry.configure(state='normal')
+        self.regions_label.configure(state='normal')
+        self.regions_entry.configure(state='normal')
+
+
+    def disable_entry(self):
+        self.size_label.configure(state='disabled')
+        self.size_entry.configure(state='disabled')
+        self.frames_label.configure(state='disabled')
+        self.frames_entry.configure(state='disabled')
+        self.regions_label.configure(state='disabled')
+        self.regions_entry.configure(state='disabled')
+
     def browse_button(self):
         selected_folder = filedialog.askdirectory(initialdir=Path(self.default_path).parent)
         self.selected_path.set(selected_folder)
 
     def button_action(self):
-        MaskSelectionToolbox(self.selected_path.get(),
-                             output_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
-                             toplevel=True)
+        print("button pressed")
+        if self.radio_var.get() == 0:
+            print("opening toolbox")
+            MaskSelectionToolbox(self.selected_path.get(),
+                                output_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
+                                toplevel=True)
+        elif self.radio_var.get() == 1:
+            print("running suggest rois")
+            batch_suggest_rois(self.selected_path.get(),
+                               output_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
+                               roi_size=(256, 256),
+                               k=3,
+                               samples=20
+                               )
+        else:
+            print("broken")
+            
+
 
 
 class StabilizeVideos(tk.Frame):
