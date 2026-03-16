@@ -375,12 +375,13 @@ def video_stabilization(
     return out_path
 
 
-def batch_stabilize(video_folder, mask_csv, shifts_csv):
+def batch_stabilize(video_folder, mask_csv, shifts_csv, method):
     video_folder = Path(video_folder)
-    video_list = [x for x in video_folder.iterdir()]
+    # matching on posix path should work but change to string just in case
+    video_list = [str(x) for x in video_folder.iterdir()]
     masked_df = pd.read_csv(Path(mask_csv))
     for vid in video_list:
-        print(vid)
+        # match video path in dataframe video row
         row = tuple(masked_df.loc[masked_df['video'] == str(vid)].iloc[0])
         # get roi coords
         roi_coords = row[1:5]
@@ -393,6 +394,5 @@ def batch_stabilize(video_folder, mask_csv, shifts_csv):
         new_name = "_".join((vid_stem, shifts_stem))
         renamed_shifts_csv = shifts_csv.with_stem(new_name)
         # call function
-        video_stabilization(vid, roi_coords, ref_frame, renamed_shifts_csv)
-    
+        video_stabilization(vid, roi_coords, ref_frame, renamed_shifts_csv, method=method)
     

@@ -144,7 +144,6 @@ class MaskSelection(tk.Frame):
         self.selected_path.set(selected_folder)
 
     def button_action(self):
-        print("button pressed")
         if self.radio_var.get() == 0:
             print("opening toolbox")
             MaskSelectionToolbox(self.selected_path.get(),
@@ -159,7 +158,7 @@ class MaskSelection(tk.Frame):
                                samples=20
                                )
         else:
-            print("broken")
+            print("Error in radio button selection")
             
 
 
@@ -185,6 +184,16 @@ class StabilizeVideos(tk.Frame):
         self.config_browse = tk.Button(self.mid_frame, text="Browse", command=self.browse_button)
         self.config_browse.grid(column=3, row=0)
 
+        self.radio_var = tk.IntVar()
+        self.radio_var.set(0)
+        self.choose_label = tk.Label(self.mid_frame, text="Choose ROI selection method")
+        self.choose_label.grid(column=0, row=1)
+
+        self.automatic_button = tk.Radiobutton(self.mid_frame, text="Translation", value=0, variable=self.radio_var)
+        self.automatic_button.grid(column=0, row=2)
+        self.manual_button = tk.Radiobutton(self.mid_frame, text="Affine transformation", value=1, variable=self.radio_var)
+        self.manual_button.grid(column=0, row=3)
+
         self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
 
         self.top_frame.grid(column=0, row=0)
@@ -196,9 +205,18 @@ class StabilizeVideos(tk.Frame):
         self.selected_path.set(selected_folder)
 
     def button_action(self):
-        batch_stabilize(self.selected_path.get(),
+        if self.radio_var.get() == 0:
+            print("Running translation based stabilization")
+            batch_stabilize(self.selected_path.get(),
                         mask_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
-                        shifts_csv=Path(self.default_path).parent / "results" / "dxdy_shifts.csv")
+                        shifts_csv=Path(self.default_path).parent / "results" / "dxdy_shifts.csv",
+                        method="translation")
+        elif self.radio_var.get() == 1:
+            print("Running affine based stabilization")
+            batch_stabilize(self.selected_path.get(),
+                        mask_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
+                        shifts_csv=Path(self.default_path).parent / "results" / "dxdy_shifts.csv",
+                        method="affine")
 
 
 class Notebook(ttk.Frame):
