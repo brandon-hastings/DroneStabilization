@@ -186,7 +186,7 @@ class StabilizeVideos(tk.Frame):
 
         self.radio_var = tk.IntVar()
         self.radio_var.set(0)
-        self.choose_label = tk.Label(self.mid_frame, text="Choose ROI selection method")
+        self.choose_label = tk.Label(self.mid_frame, text="Choose transformation method")
         self.choose_label.grid(column=0, row=1)
 
         self.automatic_button = tk.Radiobutton(self.mid_frame, text="Translation", value=0, variable=self.radio_var)
