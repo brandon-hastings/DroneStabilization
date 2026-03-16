@@ -279,7 +279,7 @@ def suggest_rois(
     return rois, ref_frame, preview
 
 
-def batch_suggest_rois(video_folder: Path, output_csv: Path):
+def batch_suggest_rois(video_folder: Path, output_csv: Path, roi_size: tuple = (256, 256), k: int = 3, samples: int = 20, border_margin: int = 100):
     # store settings
     video_folder = video_folder
     output_csv = output_csv
@@ -301,11 +301,11 @@ def batch_suggest_rois(video_folder: Path, output_csv: Path):
     for video in video_list:
         rois, ref_frame, _ = suggest_rois(
             video_path=video,
-            roi_size=(256, 256),
-            k=3,
-            samples=100,              # at least 6
+            roi_size=roi_size,
+            k=k,
+            samples=samples,              # at least 6
             analysis_scale=0.5,     # 0.4–0.6 is a good range for 4K
-            border_margin=300,      # avoid edges
+            border_margin=border_margin,      # avoid edges
             stability_weight=1.0,
             texture_weight=1.0,
             return_preview=False
