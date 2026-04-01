@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import csv
+import os
 from pathlib import Path
 import math
 
@@ -378,8 +379,9 @@ def video_stabilization(
 def batch_stabilize(video_folder, mask_csv, shifts_csv, method):
     video_folder = Path(video_folder)
     # matching on posix path should work but change to string just in case
-    video_list = [str(x) for x in video_folder.iterdir()]
+    video_list = [os.path.normpath(x) for x in video_folder.iterdir()]
     masked_df = pd.read_csv(Path(mask_csv))
+    masked_df['video'] = masked_df['video'].apply(lambda x: os.path.normpath(x))
     for vid in video_list:
         # match video path in dataframe video row
         row = tuple(masked_df.loc[masked_df['video'] == str(vid)].iloc[0])
