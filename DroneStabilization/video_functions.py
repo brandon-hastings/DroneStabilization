@@ -388,7 +388,7 @@ def batch_stabilize(video_folder, mask_csv, shifts_csv, method):
         # get roi coords
         roi_coords = row[1:5]
         #get ref frame
-        ref_frame = row[5]
+        ref_frame = int(row[5])
         # name individual shifts file
         vid_stem = Path(vid).stem
         shifts_csv = Path(shifts_csv)
