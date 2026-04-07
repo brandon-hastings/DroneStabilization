@@ -147,42 +147,13 @@ def video_stabilization(
         if pad_right or pad_bottom:
             print(f"[INFO] Padding for MP4 even dims: ({W},{H}) -> ({outW},{outH})")
 
-    # def try_open_writer(path: Path, fourcc_tag: str, width: int, height: int, fps_val: float):
-    #     fourcc = cv2.VideoWriter_fourcc(*fourcc_tag)
-    #     wr = cv2.VideoWriter(str(path), fourcc, fps_val, (width, height))
-    #     return wr
-
-    # attempts = []
-    # for tag in prefer_codecs:
-    #     if tag in ("mp4v", "avc1"):
-    #         attempts.append((tag, output_path.with_suffix(".mp4"), outW, outH))
-    #     elif tag == "XVID":
-    #         attempts.append((tag, output_path.with_suffix(".avi"), W, H))
-    #     else:
-    #         attempts.append((tag, output_path.with_suffix(".avi"), W, H))
-
-    # writer = None
-    # chosen = None
-    # for tag, path_try, w_try, h_try in attempts:
-    #     wr = try_open_writer(path_try, tag, w_try, h_try, fps)
-    #     print(f"[INFO] Trying writer {tag} -> {path_try} @ {w_try}x{h_try} … opened={wr.isOpened()}")
-    #     if wr.isOpened():
-    #         writer = wr
-    #         chosen = (tag, path_try, w_try, h_try)
-    #         break
-    #     else:
-    #         try: wr.release()
-    #         except: pass
-
-    # if writer is None:
-    #     raise RuntimeError("Failed to open VideoWriter (mp4v/avc1/XVID). Try AVI/MJPG or install FFmpeg-enabled OpenCV.")
-
-    # fourcc_tag, out_path, writeW, writeH = chosen
-    # print(f"[INFO] Using writer: {fourcc_tag} -> {out_path} ({writeW}x{writeH} @ {fps:.3f} fps)")
-
-    # TODO: replace above writer with ffmpeg subprocess call initialized here
+    # video writer using ffmpeg subprocess call initialized here
     ffmpeg_cmd = ffmpeg_params(width=outW, height=outH, fps=fps, output_filename=output_path)
-    # ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, bufsize=0)
+    # TODO: create separate log files
+    # log_file = video_path.parents[2] / "results" / "logs" / f"{video_path.stem}.log"
+    # err_file = video_path.parents[2] / "results" / "logs" / f"{video_path.stem}.err"
+    # log_file.parent.mkdir(parents=True, exist_ok=True)
+    # with open(log_file, "w") as out, open(err_file, "w") as err:
     ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
     # -----------------------
     # Precompute data per method
@@ -294,9 +265,10 @@ def video_stabilization(
             assert stabilized.shape[2] == 3
             assert stabilized.shape[0] == outH
             assert stabilized.shape[1] == outW
-
             stabilized = np.ascontiguousarray(stabilized)
             
+            # call to ffmpeg subprocess writer for each frame here to fix lagged frame writing
+            # relies on ffmpeg installed independently and that it is added to your PATH
             ffmpeg_process.stdin.write(stabilized.tobytes())
 
             # writer.write(stabilized)
@@ -368,12 +340,17 @@ def video_stabilization(
             if is_mp4_target and (pad_right or pad_bottom):
                 stabilized = cv2.copyMakeBorder(stabilized, 0, pad_bottom, 0, pad_right,
                                                 borderType=cv2.BORDER_CONSTANT, value=(0, 0, 0))
-            # TODO: call to ffmpeg subprocess writer for each frame here. Should fix lagged frame writing
-            # relies on ffmpeg installed independently and that it is added to your PATH
-            stabilized = np.ascontiguousarray(stabilized)
-            ffmpeg_process.stdin.write(stabilized.tobytes())
 
-            # writer.write(stabilized)
+            # Guarantee correct frames
+            assert stabilized.dtype == np.uint8
+            assert stabilized.shape[2] == 3
+            assert stabilized.shape[0] == outH
+            assert stabilized.shape[1] == outW
+            stabilized = np.ascontiguousarray(stabilized)
+
+            # call to ffmpeg subprocess writer for each frame here to fix lagged frame writing
+            # relies on ffmpeg installed independently and that it is added to your PATH
+            ffmpeg_process.stdin.write(stabilized.tobytes())
 
             # Log affine params (a11 a12 a13; a21 a22 a23) + dx dy from matrix
             a11, a12, a13 = float(M[0, 0]), float(M[0, 1]), float(M[0, 2])
@@ -383,17 +360,13 @@ def video_stabilization(
 
         frame_idx += 1
 
-    # Cleanup
-    # TODO: replace writer with ffmpeg subprocess calls
+    # Process cleanup
     # close ffmpeg process and wait for process to finish before proceeding
     ffmpeg_process.stdin.close()
     ffmpeg_process.wait()
-    
-    # stderr = ffmpeg_process.stderr.read().decode()
-    # if stderr:
-    #     print(stderr)
-
-    # writer.release()
+    # TODO: create separate log files
+    # err.close()
+    # out.close()
     cap.release()
     fcsv.close()
 
