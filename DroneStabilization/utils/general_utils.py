@@ -21,13 +21,15 @@ def ffmpeg_params(width: int | str, height: int | str, fps: int | float | str, o
     ffmpeg_cmd = [
         'ffmpeg',
         '-y', #overwrite output
+        '-hwaccel', 'cuda',
+        '-hwaccel_output_format', 'cuda',
         '-f', 'rawvideo',
         '-vcodec', 'rawvideo',
         "-pix_fmt", "bgr24",
         '-s', f'{width}x{height}',
         '-r', fps,
         '-i', '-',
-        '-c:v', 'libx264',
+        '-c:v', 'h264_nvenc',
         "-crf", "18",
         '-pix_fmt', 'yuv420p',
         output_filename
