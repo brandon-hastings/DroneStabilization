@@ -81,6 +81,7 @@ class MaskSelectionToolbox:
     # -------------------- image loading --------------------
     def load_image(self):
         path = Path(self.video_list[self.index])
+        print(path.name)
         # extract middle frame and convert color
         frame_img, self.frame_index = frame_ripper(path)
         img = cv2.cvtColor(frame_img, cv2.COLOR_BGR2RGB)

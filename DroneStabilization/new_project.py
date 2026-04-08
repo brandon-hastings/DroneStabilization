@@ -1,6 +1,8 @@
 from datetime import datetime as dt
 from pathlib import Path
 import os
+import shutil
+import platform
 import utils
 import utils.yaml_utils
 
@@ -35,6 +37,9 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
     os.makedirs(project_path, exist_ok=True)
     destination = project_path / "original_data"
 
+    # check windows system
+    is_windows = platform.system() == "Windows"
+
     if len(folder) == 1:
         os.makedirs(destination, exist_ok=True)
         subfolder = os.path.join(destination, os.path.basename(folder[0]))
@@ -46,8 +51,11 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
                 target = Path(subfolder) / file_name
                 # symlink only files
                 if os.path.isfile(source):
-                    if not target.exists():
+                    if not target.exists() and not is_windows:
                         target.symlink_to(source.resolve())
+                    else:
+                        shutil.copy(source, target)
+
     if len(folder) > 1:
         os.makedirs(destination, exist_ok=True)
 
@@ -60,9 +68,12 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
                 if file.is_file() and file.name.lower().endswith(image_type):
                     target = target_dir / file.name
 
-                    if not target.exists():
+                    if not target.exists() and not is_windows:
                         # create symlink
                         target.symlink_to(file.resolve())
+                    else:
+                        shutil.copy(file, target)
+
     elif len(folder) == 0:
         print("No folders containing images passed to project file")
 

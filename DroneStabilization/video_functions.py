@@ -1,8 +1,11 @@
 import cv2
+import subprocess
 import numpy as np
 import pandas as pd
 import csv
+import os
 from pathlib import Path
+from utils.general_utils import ffmpeg_params
 import math
 
 def frame_ripper(video_path):
@@ -144,39 +147,14 @@ def video_stabilization(
         if pad_right or pad_bottom:
             print(f"[INFO] Padding for MP4 even dims: ({W},{H}) -> ({outW},{outH})")
 
-    def try_open_writer(path: Path, fourcc_tag: str, width: int, height: int, fps_val: float):
-        fourcc = cv2.VideoWriter_fourcc(*fourcc_tag)
-        wr = cv2.VideoWriter(str(path), fourcc, fps_val, (width, height))
-        return wr
-
-    attempts = []
-    for tag in prefer_codecs:
-        if tag in ("mp4v", "avc1"):
-            attempts.append((tag, output_path.with_suffix(".mp4"), outW, outH))
-        elif tag == "XVID":
-            attempts.append((tag, output_path.with_suffix(".avi"), W, H))
-        else:
-            attempts.append((tag, output_path.with_suffix(".avi"), W, H))
-
-    writer = None
-    chosen = None
-    for tag, path_try, w_try, h_try in attempts:
-        wr = try_open_writer(path_try, tag, w_try, h_try, fps)
-        print(f"[INFO] Trying writer {tag} -> {path_try} @ {w_try}x{h_try} … opened={wr.isOpened()}")
-        if wr.isOpened():
-            writer = wr
-            chosen = (tag, path_try, w_try, h_try)
-            break
-        else:
-            try: wr.release()
-            except: pass
-
-    if writer is None:
-        raise RuntimeError("Failed to open VideoWriter (mp4v/avc1/XVID). Try AVI/MJPG or install FFmpeg-enabled OpenCV.")
-
-    fourcc_tag, out_path, writeW, writeH = chosen
-    print(f"[INFO] Using writer: {fourcc_tag} -> {out_path} ({writeW}x{writeH} @ {fps:.3f} fps)")
-
+    # video writer using ffmpeg subprocess call initialized here
+    ffmpeg_cmd = ffmpeg_params(width=outW, height=outH, fps=fps, output_filename=output_path)
+    # TODO: create separate log files
+    # log_file = video_path.parents[2] / "results" / "logs" / f"{video_path.stem}.log"
+    # err_file = video_path.parents[2] / "results" / "logs" / f"{video_path.stem}.err"
+    # log_file.parent.mkdir(parents=True, exist_ok=True)
+    # with open(log_file, "w") as out, open(err_file, "w") as err:
+    ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
     # -----------------------
     # Precompute data per method
     # -----------------------
@@ -233,7 +211,7 @@ def video_stabilization(
     # -----------------------
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
-        writer.release()
+        # writer.release()
         raise RuntimeError(f"Failed to re-open video: {video_path}")
 
     # Prepare CSV (stream write)
@@ -276,10 +254,24 @@ def video_stabilization(
                                         borderMode=cv2.BORDER_REFLECT)
 
             # Padding for MP4 even dims (if needed)
-            if fourcc_tag in ("mp4v", "avc1") and (pad_right or pad_bottom):
+            if is_mp4_target and (pad_right or pad_bottom):
                 stabilized = cv2.copyMakeBorder(stabilized, 0, pad_bottom, 0, pad_right,
                                                 borderType=cv2.BORDER_CONSTANT, value=(0, 0, 0))
-            writer.write(stabilized)
+            # TODO: call to ffmpeg subprocess writer for each frame here. Should fix lagged frame writing
+            # relies on ffmpeg installed independently and that it is added to your PATH
+            
+            # Guarantee correct frames
+            assert stabilized.dtype == np.uint8
+            assert stabilized.shape[2] == 3
+            assert stabilized.shape[0] == outH
+            assert stabilized.shape[1] == outW
+            stabilized = np.ascontiguousarray(stabilized)
+            
+            # call to ffmpeg subprocess writer for each frame here to fix lagged frame writing
+            # relies on ffmpeg installed independently and that it is added to your PATH
+            ffmpeg_process.stdin.write(stabilized.tobytes())
+
+            # writer.write(stabilized)
             wcsv.writerow((frame_idx, dx, dy))
 
         else:
@@ -345,48 +337,59 @@ def video_stabilization(
                                         flags=cv2.INTER_LINEAR,
                                         borderMode=cv2.BORDER_REFLECT)
 
-            if fourcc_tag in ("mp4v", "avc1") and (pad_right or pad_bottom):
+            if is_mp4_target and (pad_right or pad_bottom):
                 stabilized = cv2.copyMakeBorder(stabilized, 0, pad_bottom, 0, pad_right,
                                                 borderType=cv2.BORDER_CONSTANT, value=(0, 0, 0))
-            writer.write(stabilized)
+
+            # Guarantee correct frames
+            assert stabilized.dtype == np.uint8
+            assert stabilized.shape[2] == 3
+            assert stabilized.shape[0] == outH
+            assert stabilized.shape[1] == outW
+            stabilized = np.ascontiguousarray(stabilized)
+
+            # call to ffmpeg subprocess writer for each frame here to fix lagged frame writing
+            # relies on ffmpeg installed independently and that it is added to your PATH
+            ffmpeg_process.stdin.write(stabilized.tobytes())
 
             # Log affine params (a11 a12 a13; a21 a22 a23) + dx dy from matrix
             a11, a12, a13 = float(M[0, 0]), float(M[0, 1]), float(M[0, 2])
             a21, a22, a23 = float(M[1, 0]), float(M[1, 1]), float(M[1, 2])
             wcsv.writerow((frame_idx, a11, a12, a13, a21, a22, a23, inliers, matched, a13, a23))
 
-        if (frame_idx % log_every) == 0:
-            if method == "translation":
-                print(f"[INFO] Frame {frame_idx}/{N}  (translation)")
-            else:
-                print(f"[INFO] Frame {frame_idx}/{N}  (affine)")
 
         frame_idx += 1
 
-    # Cleanup
-    writer.release()
+    # Process cleanup
+    # close ffmpeg process and wait for process to finish before proceeding
+    ffmpeg_process.stdin.close()
+    ffmpeg_process.wait()
+    # TODO: create separate log files
+    # err.close()
+    # out.close()
     cap.release()
     fcsv.close()
 
-    size_bytes = out_path.stat().st_size if out_path.exists() else 0
-    print(f"[INFO] Done. Wrote: {out_path}  bytes={size_bytes}")
+    size_bytes = output_path.stat().st_size if output_path.exists() else 0
+    print(f"[INFO] Done. Wrote: {output_path}  bytes={size_bytes}")
     print(f"[INFO] CSV: {shifts_csv}")
 
-    return out_path
+    return output_path
 
 
 def batch_stabilize(video_folder, mask_csv, shifts_csv, method):
     video_folder = Path(video_folder)
     # matching on posix path should work but change to string just in case
-    video_list = [str(x) for x in video_folder.iterdir()]
+    video_list = [os.path.normpath(x) for x in video_folder.iterdir()]
     masked_df = pd.read_csv(Path(mask_csv))
+    masked_df['video'] = masked_df['video'].apply(lambda x: os.path.normpath(x))
     for vid in video_list:
         # match video path in dataframe video row
         row = tuple(masked_df.loc[masked_df['video'] == str(vid)].iloc[0])
         # get roi coords
         roi_coords = row[1:5]
         #get ref frame
-        ref_frame = row[5]
+        ref_frame = int(row[5])
         # name individual shifts file
         vid_stem = Path(vid).stem
         shifts_csv = Path(shifts_csv)
