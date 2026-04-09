@@ -2,6 +2,8 @@ import pysrt
 import sys
 import re
 import pandas as pd
+import os
+from pathlib import Path
 
 def parse_camera_parameters(sub):
     params_dict = {}
@@ -17,9 +19,9 @@ def parse_camera_parameters(sub):
 
 def parse_srt(srt_file):
     srt_subs = pysrt.open(srt_file)
-    video_length = srt_subs[-1].end
-    date = re.search(r'(\d{4})-(\d{2})-(\d{2})', srt_subs[0].text)
-    start_time = re.search(r'(\d{2}):(\d{2}):(\d{2}).(\d{3})', srt_subs[0].text)
+    video_length = str(srt_subs[-1].end)
+    date = re.search(r'(\d{4})-(\d{2})-(\d{2})', srt_subs[0].text).group(0)
+    start_time = re.search(r'(\d{2}):(\d{2}):(\d{2}).(\d{3})', srt_subs[0].text).group(0)
     df = None
     for i in range(0, len(srt_subs)):
         cam_params = parse_camera_parameters(srt_subs[i])
@@ -27,6 +29,8 @@ def parse_srt(srt_file):
             df = pd.DataFrame(cam_params, index=[0])
         else:
             df.loc[len(df)] = cam_params
+    df["video_length"], df["date"], df["start_time"] = video_length, date, start_time
+    df
     
     column_type_mapping = {
         "iso": "int32",
@@ -42,7 +46,24 @@ def parse_srt(srt_file):
         "abs_alt": "float32"
     }
     dfn = df.astype(column_type_mapping)
-    print(dfn.describe)
+    return dfn
+
+def batch_parse_srt(folder_path):
+    full_df = None
+    for file in os.listdir(folder_path):
+        file_name = os.path.normpath(file)
+        if str(file_name).endswith(".SRT"):
+            print(file_name)
+            df = parse_srt(os.path.join(folder_path, file_name))
+            df["filename"] = str(file_name)
+            print(df.head)
+            if full_df is None:
+                full_df = df
+            elif type(full_df) == pd.DataFrame:
+                full_df = pd.concat([full_df, df])
+    return full_df
+
 
 if __name__ == "__main__":
-    parse_srt(sys.argv[1])
+    experiment_metadata = batch_parse_srt(sys.argv[1])
+    experiment_metadata.to_csv(Path("C:/Users/pc_access/CodeProjects/DroneStabilization/DroneStabilization/honami_2025-bth-2026-04-07/results/exp_metadata.csv"))
