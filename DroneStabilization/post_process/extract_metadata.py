@@ -7,6 +7,7 @@ from pathlib import Path
 
 def parse_camera_parameters(sub):
     params_dict = {}
+    time = re.search(r'(\d{2}):(\d{2}):(\d{2}).(\d{3})', sub.text).group(0)
     camera_specs = re.findall(r'\[.*?\]', sub.text)
     for i in camera_specs[:-1]:
         key, value = i.split(": ")
@@ -15,13 +16,14 @@ def parse_camera_parameters(sub):
     alt_data = camera_specs[-1].split(" ")
     params_dict[alt_data[0][1:-1]] = alt_data[1]
     params_dict[alt_data[2][:-1]] = alt_data[3][:-1]
+    # add frame time
+    params_dict["frame_time"] = time
     return params_dict
 
 def parse_srt(srt_file):
     srt_subs = pysrt.open(srt_file)
     video_length = str(srt_subs[-1].end)
     date = re.search(r'(\d{4})-(\d{2})-(\d{2})', srt_subs[0].text).group(0)
-    start_time = re.search(r'(\d{2}):(\d{2}):(\d{2}).(\d{3})', srt_subs[0].text).group(0)
     df = None
     for i in range(0, len(srt_subs)):
         cam_params = parse_camera_parameters(srt_subs[i])
@@ -29,7 +31,7 @@ def parse_srt(srt_file):
             df = pd.DataFrame(cam_params, index=[0])
         else:
             df.loc[len(df)] = cam_params
-    df["video_length"], df["date"], df["start_time"] = video_length, date, start_time
+    df["video_length"], df["date"], = video_length, date
     df
     
     column_type_mapping = {
@@ -66,4 +68,4 @@ def batch_parse_srt(folder_path):
 
 if __name__ == "__main__":
     experiment_metadata = batch_parse_srt(sys.argv[1])
-    experiment_metadata.to_csv(Path("C:/Users/pc_access/CodeProjects/DroneStabilization/DroneStabilization/honami_2025-bth-2026-04-07/results/exp_metadata.csv"))
+    experiment_metadata.to_csv(Path("/Users/brandonhastings/Library/CloudStorage/OneDrive-TheUniversityofNottingham/Gibbs_lab/2026/Drone_data/metadata/exp_metadata.csv"))
