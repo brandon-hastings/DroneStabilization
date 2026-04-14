@@ -16,6 +16,7 @@ def check_resume(videos_list, csv_file):
     else:
         return videos_list
 
+# TODO: add exposed option to not use gpu encoding
 def ffmpeg_params(width: int | str, height: int | str, fps: int | float | str, output_filename: str) -> list:
     width, height, fps = str(width), str(height), str(fps)
     ffmpeg_cmd = [
