@@ -46,7 +46,8 @@ def video_stabilization(
     ratio_thresh: float = 0.75,            # Lowe's ratio for SIFT matching
     min_matches: int = 12,                 # minimum matches to attempt affine
     ransac_thresh: float = 3.0,            # RANSAC reprojection threshold (px)
-    use_partial_affine: bool = True        # True -> estimateAffinePartial2D (no shear), False -> estimateAffine2D
+    use_partial_affine: bool = True,        # True -> estimateAffinePartial2D (no shear), False -> estimateAffine2D
+    use_gpu: bool = False
 ):
     """
     Streamed stabilization using either:
@@ -148,7 +149,7 @@ def video_stabilization(
             print(f"[INFO] Padding for MP4 even dims: ({W},{H}) -> ({outW},{outH})")
 
     # video writer using ffmpeg subprocess call initialized here
-    ffmpeg_cmd = ffmpeg_params(width=outW, height=outH, fps=fps, output_filename=output_path)
+    ffmpeg_cmd = ffmpeg_params(width=outW, height=outH, fps=fps, output_filename=output_path, use_gpu=use_gpu)
     # TODO: create separate log files
     # log_file = video_path.parents[2] / "results" / "logs" / f"{video_path.stem}.log"
     # err_file = video_path.parents[2] / "results" / "logs" / f"{video_path.stem}.err"
@@ -377,7 +378,7 @@ def video_stabilization(
     return output_path
 
 
-def batch_stabilize(video_folder, mask_csv, shifts_csv, method):
+def batch_stabilize(video_folder, mask_csv, shifts_csv, method, use_gpu):
     video_folder = Path(video_folder)
     # matching on posix path should work but change to string just in case
     video_list = [os.path.normpath(x) for x in video_folder.iterdir()]
@@ -397,5 +398,5 @@ def batch_stabilize(video_folder, mask_csv, shifts_csv, method):
         new_name = "_".join((vid_stem, shifts_stem))
         renamed_shifts_csv = shifts_csv.with_stem(new_name)
         # call function
-        video_stabilization(vid, roi_coords, ref_frame, renamed_shifts_csv, method=method)
+        video_stabilization(vid, roi_coords, ref_frame, renamed_shifts_csv, method=method, use_gpu=use_gpu)
     

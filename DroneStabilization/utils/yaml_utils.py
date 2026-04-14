@@ -21,23 +21,8 @@ def create_config():
     # Image type of raw images
         image_type:
         \n
-    # Number of images to label
-        n_images_label: 20
-        \n
-    # Bounding box object classes
-        bbox_classes:
-        - object1
-        - object2
-    # Bounding box training parameters
-        init_lr: 1e-4
-        num_epochs: 20
-        batch_size: 32
-        \n
-
-    # Kepoint label classes
-        keypoint_classes:
-        - point1
-        - point2
+    # GPU usage (NVIDIA only. Enter True or False)
+        use_gpu:
         """
 
     ruamelFile = YAML()

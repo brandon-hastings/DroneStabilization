@@ -86,6 +86,7 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
     cfg_file["project_path"] = str(project_path)
     cfg_file["date"] = d
     cfg_file["image_type"] = image_type
+    cfg_file["use_gpu"] = "False"
 
     projconfigfile = os.path.join(str(project_path), "config.yaml")
     # Write dictionary to yaml config file

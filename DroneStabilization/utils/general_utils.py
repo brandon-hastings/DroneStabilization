@@ -15,26 +15,62 @@ def check_resume(videos_list, csv_file):
         return todo_videos
     else:
         return videos_list
+    
+def str_to_bool(s):
+    """
+    Convert a string to a boolean value. Raises ValueError for invalid inputs.
+    """
+    if not isinstance(s, str):
+        raise TypeError("Input must be a string.")
 
-# TODO: add exposed option to not use gpu encoding
-def ffmpeg_params(width: int | str, height: int | str, fps: int | float | str, output_filename: str) -> list:
+    truthy = {"true", "1", "yes", "y", "on"}
+    falsy = {"false", "0", "no", "n", "off"}
+
+    s_lower = s.strip().lower()
+
+    if s_lower in truthy:
+        return True
+    elif s_lower in falsy:
+        return False
+    else:
+        raise ValueError(f"Cannot convert '{s}' to boolean.")
+
+# use_gpu is currently exposed in the config file only
+def ffmpeg_params(width: int | str, height: int | str, fps: int | float | str, output_filename: str, use_gpu: bool) -> list:
     width, height, fps = str(width), str(height), str(fps)
-    ffmpeg_cmd = [
-        'ffmpeg',
-        '-y', #overwrite output
-        '-f', 'rawvideo',
-        '-vcodec', 'rawvideo',
-        "-pix_fmt", "bgr24",
-        '-s', f'{width}x{height}',
-        '-r', fps,
-        '-i', '-',
-        # NVENC encoding
-        '-c:v', 'h264_nvenc',
-        '-rc', 'vbr_hq',
-        '-b:v', '50M',
-        '-maxrate', '50M',
-        '-pix_fmt', 'yuv420p',
-        output_filename
-    ]
+    if use_gpu:
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-y', #overwrite output
+            '-f', 'rawvideo',
+            '-vcodec', 'rawvideo',
+            "-pix_fmt", "bgr24",
+            '-s', f'{width}x{height}',
+            '-r', fps,
+            '-i', '-',
+            # NVENC encoding
+            '-c:v', 'h264_nvenc',
+            '-rc', 'vbr_hq',
+            '-b:v', '50M',
+            '-maxrate', '50M',
+            '-pix_fmt', 'yuv420p',
+            output_filename
+        ]
+    else:
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-y', #overwrite output
+            '-f', 'rawvideo',
+            '-vcodec', 'rawvideo',
+            "-pix_fmt", "bgr24",
+            '-s', f'{width}x{height}',
+            '-r', fps,
+            '-i', '-',
+            # Encoding
+            '-c:v', 'libx264',
+            '-crf', '18',
+            '-pix_fmt', 'yuv420p',
+            output_filename
+        ]
 
     return ffmpeg_cmd

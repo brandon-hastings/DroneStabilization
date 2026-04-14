@@ -4,7 +4,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 from tkinter import filedialog
-import utils
+import utils.general_utils
 import utils.yaml_utils
 from labeling_toolbox import MaskSelectionToolbox
 from video_functions import batch_stabilize
@@ -184,6 +184,8 @@ class StabilizeVideos(tk.Frame):
         self.config_browse = tk.Button(self.mid_frame, text="Browse", command=self.browse_button)
         self.config_browse.grid(column=3, row=0)
 
+        self.gpu_usage = utils.general_utils.str_to_bool(utils.yaml_utils.read_config(config_file)["use_gpu"])
+
         self.radio_var = tk.IntVar()
         self.radio_var.set(0)
         self.choose_label = tk.Label(self.mid_frame, text="Choose transformation method")
@@ -210,13 +212,15 @@ class StabilizeVideos(tk.Frame):
             batch_stabilize(self.selected_path.get(),
                         mask_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
                         shifts_csv=Path(self.default_path).parent / "results" / "dxdy_shifts.csv",
-                        method="translation")
+                        method="translation",
+                        use_gpu=self.gpu_usage)
         elif self.radio_var.get() == 1:
             print("Running affine based stabilization")
             batch_stabilize(self.selected_path.get(),
                         mask_csv=Path(self.default_path).parent / "results" / "mask_labels.csv",
                         shifts_csv=Path(self.default_path).parent / "results" / "dxdy_shifts.csv",
-                        method="affine")
+                        method="affine",
+                        use_gpu=self.gpu_usage)
 
 
 class Notebook(ttk.Frame):
